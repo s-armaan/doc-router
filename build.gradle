@@ -30,7 +30,7 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
-def applicationMainClass = providers.gradleProperty('mainClass').orElse('com.docrouter.Main')
+def applicationMainClass = providers.gradleProperty('mainClass').orElse('doc_router.Main')
 def applicationName = 'doc-router'
 def jpackageInputDirectory = layout.buildDirectory.dir('jpackage/input')
 def jpackageOutputDirectory = layout.buildDirectory.dir('jpackage/output')
