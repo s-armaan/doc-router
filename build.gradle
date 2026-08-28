@@ -1,0 +1,69 @@
+import java.util.Locale
+
+plugins {
+    id 'java'
+}
+
+group = 'com.docrouter'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    implementation(platform('com.fasterxml.jackson:jackson-bom:2.20.1'))
+    implementation('com.fasterxml.jackson.core:jackson-databind')
+    implementation('com.fasterxml.jackson.dataformat:jackson-dataformat-yaml')
+
+    testImplementation(platform('org.junit:junit-bom:5.14.3'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+def applicationMainClass = providers.gradleProperty('mainClass').orElse('com.docrouter.Main')
+def applicationName = 'doc-router'
+def jpackageInputDirectory = layout.buildDirectory.dir('jpackage/input')
+def jpackageOutputDirectory = layout.buildDirectory.dir('jpackage/output')
+
+tasks.register('stageJpackageInput', Sync) {
+    dependsOn(tasks.named('jar'))
+    from(configurations.runtimeClasspath)
+    from(tasks.named('jar'))
+    into(jpackageInputDirectory)
+}
+
+tasks.register('jpackage', Exec) {
+    group = 'distribution'
+    dependsOn(tasks.named('stageJpackageInput'))
+    inputs.dir(jpackageInputDirectory)
+    inputs.property('mainClass', applicationMainClass)
+    outputs.dir(jpackageOutputDirectory)
+
+    doFirst {
+        def jpackageBinary = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'jpackage.exe' : 'jpackage'
+        def jpackageExecutable = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(25)
+        }.get().metadata.installationPath.file("bin/${jpackageBinary}").asFile
+
+        executable(jpackageExecutable)
+        args(
+            '--type', 'app-image',
+            '--name', applicationName,
+            '--dest', jpackageOutputDirectory.get().asFile.absolutePath,
+            '--input', jpackageInputDirectory.get().asFile.absolutePath,
+            '--main-jar', tasks.named('jar').get().archiveFileName.get(),
+            '--main-class', applicationMainClass.get(),
+            '--add-modules', 'java.desktop'
+        )
+    }
+}
