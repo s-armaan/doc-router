@@ -1,4 +1,4 @@
-package doc_router.util;
+package doc_router;
 
 import java.io.IOException;
 import java.io.Reader;

@@ -2,7 +2,6 @@ package doc_router;
 
 import java.nio.file.Path;
 import javax.swing.JOptionPane;
-import doc_router.util.Config;
 
 public final class Main {
     public static void main(String[] args) {
