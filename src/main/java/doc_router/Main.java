@@ -17,6 +17,13 @@ public final class Main {
             System.exit(1);
         });
 
-        Config.load();
+        // TODO: add inbox (the folder to watch) to settings or per rule
+        Path inbox = Path.of(System.getProperty("user.home"), "Downloads");
+
+        AppConfig config = Config.load();
+        Router router = new Router(config.rules());
+        DirectoryWatcher watcher = new DirectoryWatcher(inbox, router);
+
+        watcher.start();
     }
 }
