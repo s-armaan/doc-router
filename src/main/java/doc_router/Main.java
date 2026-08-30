@@ -11,7 +11,7 @@ public final class Main {
             JOptionPane.showMessageDialog(
                     null,
                     "Unexpected error:\n" + error.getMessage(),
-                    "Doc Router error",
+                    "Doc Router - Error",
                     JOptionPane.ERROR_MESSAGE);
 
             System.exit(1);
@@ -23,6 +23,17 @@ public final class Main {
         AppConfig config = Config.load();
         Router router = new Router(config.rules());
         DirectoryWatcher watcher = new DirectoryWatcher(inbox, router);
+
+        if (config.rules().size() == 0) {
+            Path configDirectory = Path.of(System.getenv("APPDATA"), "doc-router");
+
+            JOptionPane.showMessageDialog(
+                    null,
+                    "Doc Router found no rules in config.yaml. Configure it before using the program:\n"
+                            + configDirectory,
+                    "Doc Router - Info",
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
 
         watcher.start();
     }
