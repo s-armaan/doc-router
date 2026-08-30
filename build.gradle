@@ -5,7 +5,8 @@ plugins {
 }
 
 group = 'docrouter'
-version = '0.1.0'
+def packageVersion = providers.gradleProperty('version').orElse('0.1.0')
+version = packageVersion.get()
 
 repositories {
     mavenCentral()
@@ -33,7 +34,8 @@ tasks.withType(Test).configureEach {
 def applicationMainClass = providers.gradleProperty('mainClass').orElse('doc_router.Main')
 def applicationName = 'doc-router'
 def jpackageInputDirectory = layout.buildDirectory.dir('jpackage/input')
-def jpackageOutputDirectory = layout.buildDirectory.dir('jpackage/output')
+def exeOutputDirectory = layout.buildDirectory.dir('jpackage/exe')
+def isWindows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
 
 tasks.register('stageJpackageInput', Sync) {
     dependsOn(tasks.named('jar'))
@@ -42,28 +44,40 @@ tasks.register('stageJpackageInput', Sync) {
     into(jpackageInputDirectory)
 }
 
-tasks.register('jpackage', Exec) {
+tasks.register('packageExe', Exec) {
     group = 'distribution'
+    description = 'Builds a Windows installer executable for Doc Router.'
     dependsOn(tasks.named('stageJpackageInput'))
     inputs.dir(jpackageInputDirectory)
     inputs.property('mainClass', applicationMainClass)
-    outputs.dir(jpackageOutputDirectory)
+    inputs.property('version', packageVersion)
+    outputs.dir(exeOutputDirectory)
 
     doFirst {
-        def jpackageBinary = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'jpackage.exe' : 'jpackage'
+        if (!isWindows) {
+            throw new GradleException('packageExe can only be run on Windows.')
+        }
+
         def jpackageExecutable = javaToolchains.launcherFor {
             languageVersion = JavaLanguageVersion.of(25)
-        }.get().metadata.installationPath.file("bin/${jpackageBinary}").asFile
+        }.get().metadata.installationPath.file('bin/jpackage.exe').asFile
 
         executable(jpackageExecutable)
         args(
-            '--type', 'app-image',
+            '--type', 'exe',
             '--name', applicationName,
-            '--dest', jpackageOutputDirectory.get().asFile.absolutePath,
+            '--app-version', project.version.toString(),
+            '--vendor', 'Doc Router',
+            '--dest', exeOutputDirectory.get().asFile.absolutePath,
             '--input', jpackageInputDirectory.get().asFile.absolutePath,
             '--main-jar', tasks.named('jar').get().archiveFileName.get(),
             '--main-class', applicationMainClass.get(),
-            '--add-modules', 'java.desktop'
+            '--add-modules', 'java.desktop',
+            '--win-dir-chooser',
+            '--win-menu',
+            '--win-menu-group', 'Doc Router',
+            '--win-per-user-install',
+            '--win-shortcut'
         )
     }
 }

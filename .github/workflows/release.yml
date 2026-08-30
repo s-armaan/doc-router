@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.version.outputs.value }}
+    steps:
+      - id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use the form v1.2.3 (received: $GITHUB_REF_NAME)." >&2
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          if (( 10#$MAJOR > 255 || 10#$MINOR > 255 || 10#$PATCH > 65535 )); then
+            echo "Release tag components must be within the Windows installer version limits (255.255.65535)." >&2
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+  package-windows:
+    name: Package Windows installer
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Run tests
+        shell: pwsh
+        run: .\gradlew.bat test
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+          $light = Get-Command light.exe -ErrorAction SilentlyContinue
+          if ($candle -and $light) {
+            $wixBin = Split-Path -Parent $candle.Source
+          } else {
+            choco install wixtoolset --version=3.11.2 --yes --no-progress
+            $fallback = Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset v3.11\bin'
+            if (Test-Path (Join-Path $fallback 'candle.exe')) {
+              $wixBin = $fallback
+            }
+          }
+          if (-not $wixBin -or -not (Test-Path (Join-Path $wixBin 'candle.exe')) -or -not (Test-Path (Join-Path $wixBin 'light.exe'))) {
+            throw 'WiX Toolset was installed, but candle.exe and light.exe could not both be found.'
+          }
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build installer
+        shell: pwsh
+        run: .\gradlew.bat packageExe "-Pversion=${{ needs.version.outputs.value }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doc-router-windows
+          path: build/jpackage/exe/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [version, package-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create or update release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* --title "Doc Router $TAG" --generate-notes
+          fi
