@@ -47,8 +47,7 @@ record AppConfig(Settings settings, List<Rule> rules) {
 
     public record Then(
             String moveTo,
-            String renameAs,
-            List<String> tags) {
+            String renameAs) {
     }
 }
 
@@ -85,15 +84,11 @@ public final class Config {
             #     filenameStartsWith: "starting-text"
             #
             #   then:
-            #     # Use {year} and {month} for date-based folders.
+            #     # Use {year}, {month}, and {originalName} for dynamic folders.
             #     moveTo: "Category/Subcategory/{year}/{month}"
             #
-            #     # Optional: rename the file.
-            #     renameAs: "Descriptive_Name_{year}-{month}.pdf"
-            #
-            #     # Optional: add tags.
-            #     tags: ["tag-one", "tag-two"]
-            #
+            #     # Optional: rename the file. {originalName} excludes the extension.
+            #     renameAs: "{originalName}_{year}-{month}.pdf"
             # Add additional rules by copying the whole example again. Put each new rule
             # directly below the previous one, starting with the same `  - name:` spacing.
             """;
@@ -183,8 +178,7 @@ public final class Config {
 
         if (then == null
                 || (!hasText(then.moveTo())
-                        && !hasText(then.renameAs())
-                        && !hasText(then.tags()))) {
+                        && !hasText(then.renameAs()))) {
             throw new InvalidConfigurationException(
                     String.format("Rule `%s` must have at least one action", rule.name()));
         }
