@@ -16,7 +16,7 @@ Doc Router has no main window. It quietly watches Downloads and shows a message 
 
 ## Create rules
 
-Rules are written in YAML. Put more specific rules before more general rules: the first rule that matches a file is used.
+Rules are written in YAML and evaluated from highest to lowest `priority`: the first matching rule in that order is used.
 
 Here is an example that moves PDF invoices to folders in Downloads organized by year and month, and then files other PDFs in a separate folder:
 
@@ -25,7 +25,7 @@ settings: {}
 
 rules:
   - name: invoices
-    priority: 100
+    priority: 200
     when:
       extensions: ["pdf"]
       filenameContains: ["invoice"]
@@ -35,7 +35,7 @@ rules:
       onConflict: autoSuffix
 
   - name: other-pdfs
-    priority: 200
+    priority: 100
     when:
       extensions: ["pdf"]
     then:

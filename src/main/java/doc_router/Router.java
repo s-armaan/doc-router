@@ -1,6 +1,7 @@
 package doc_router;
 
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 
 public class Router {
@@ -8,7 +9,9 @@ public class Router {
     private final FileActionExecutor fileActionExecutor;
 
     public Router(List<AppConfig.Rule> rules) {
-        this.rules = rules;
+        this.rules = rules.stream()
+                .sorted(Comparator.comparing(AppConfig.Rule::priority).reversed())
+                .toList();
         this.fileActionExecutor = new FileActionExecutor();
     }
 
