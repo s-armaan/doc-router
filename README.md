@@ -32,6 +32,7 @@ rules:
     then:
       moveTo: "Documents/Invoices/{year}/{month}"
       renameAs: "Invoice_{originalName}_{year}-{month}.pdf"
+      onConflict: autoSuffix
 
   - name: other-pdfs
     priority: 200
@@ -52,6 +53,7 @@ This example routes a file named `July invoice.pdf` to:
 - `filenameStartsWith`: Text the filename must begin with.
 - `moveTo`: A folder inside Downloads. Missing folders are created automatically.
 - `renameAs`: An optional new filename. Include the extension yourself when renaming a file.
+- `onConflict`: What to do if the destination filename already exists: `autoSuffix` (default) adds ` (1)`, ` (2)`, and so on; `skip` leaves the incoming file in Downloads; `overwrite` replaces the existing destination file.
 
 You can use these placeholders in `moveTo` and `renameAs`:
 

@@ -47,7 +47,8 @@ record AppConfig(Settings settings, List<Rule> rules) {
 
     public record Then(
             String moveTo,
-            String renameAs) {
+            String renameAs,
+            String onConflict) {
     }
 }
 
@@ -89,6 +90,10 @@ public final class Config {
             #
             #     # Optional: rename the file. {originalName} excludes the extension.
             #     renameAs: "{originalName}_{year}-{month}.pdf"
+            #
+            #     # Optional: choose what to do when the destination already exists.
+            #     # autoSuffix (default), skip, or overwrite.
+            #     onConflict: autoSuffix
             # Add additional rules by copying the whole example again. Put each new rule
             # directly below the previous one, starting with the same `  - name:` spacing.
             """;
@@ -103,15 +108,7 @@ public final class Config {
         CONFIG_FILE = createConfigFile();
 
         try (Reader reader = Files.newBufferedReader(CONFIG_FILE, StandardCharsets.UTF_8)) {
-            YAMLMapper mapper = YAMLMapper.builder()
-                    .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                    .build();
-
-            AppConfig config = mapper.readValue(reader, AppConfig.class);
-
-            validate(config);
-
-            return config;
+            return parse(reader);
         } catch (JsonProcessingException e) {
             throw new InvalidConfigurationException(
                     "Could not parse config file: " + e.getOriginalMessage(), e);
@@ -119,6 +116,15 @@ public final class Config {
             throw new UncheckedIOException(e);
         }
 
+    }
+
+    static AppConfig parse(Reader reader) throws IOException {
+        YAMLMapper mapper = YAMLMapper.builder()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .build();
+        AppConfig config = mapper.readValue(reader, AppConfig.class);
+        validate(config);
+        return config;
     }
 
     private static void validate(AppConfig config) {
@@ -186,6 +192,26 @@ public final class Config {
         if (hasText(then.moveTo())) {
             validateDestinationPath(rule.name(), then.moveTo());
         }
+
+        if (hasText(then.renameAs())) {
+            validateDestinationFilename(rule.name(), then.renameAs());
+        }
+
+        validateConflictPolicy(rule.name(), then.onConflict());
+    }
+
+    private static void validateConflictPolicy(String ruleName, String onConflict) {
+        if (onConflict == null) {
+            return;
+        }
+
+        if (onConflict.isBlank() || ConflictPolicy.fromConfigValue(onConflict) == null) {
+            throw new InvalidConfigurationException(
+                    String.format(
+                            "Rule `%s` has invalid onConflict value `%s`; expected autoSuffix, skip, or overwrite",
+                            ruleName,
+                            onConflict));
+        }
     }
 
     private static void validateDestinationPath(String ruleName, String moveTo) {
@@ -204,6 +230,27 @@ public final class Config {
         } catch (InvalidPathException e) {
             throw new InvalidConfigurationException(
                     String.format("Rule `%s` has an invalid destination path: %s", ruleName, moveTo), e);
+        }
+    }
+
+    private static void validateDestinationFilename(String ruleName, String renameAs) {
+        try {
+            Path destination = Path.of(renameAs);
+
+            if (destination.isAbsolute()
+                    || destination.getRoot() != null
+                    || renameAs.contains("/")
+                    || renameAs.contains("\\")
+                    || ".".equals(renameAs)
+                    || "..".equals(renameAs)) {
+                throw new InvalidConfigurationException(
+                        String.format(
+                                "Rule `%s` renameAs must be a single filename without path segments",
+                                ruleName));
+            }
+        } catch (InvalidPathException e) {
+            throw new InvalidConfigurationException(
+                    String.format("Rule `%s` has an invalid renameAs value: %s", ruleName, renameAs), e);
         }
     }
 

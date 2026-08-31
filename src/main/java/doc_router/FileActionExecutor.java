@@ -2,16 +2,19 @@ package doc_router;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 
 public class FileActionExecutor {
     public void execute(Path file, AppConfig.Then actions) {
         Path source = file.toAbsolutePath().normalize();
+        Path sourceDirectory = source.getParent();
         LocalDate today = LocalDate.now();
         String originalName = originalName(source);
-        Path destinationDirectory = source.getParent();
+        Path destinationDirectory = sourceDirectory;
 
         String moveTo = actions.moveTo();
         if (moveTo != null && !moveTo.isBlank()) {
@@ -22,15 +25,28 @@ public class FileActionExecutor {
         String destinationFilename = renameAs != null && !renameAs.isBlank()
                 ? expandTokens(renameAs, today, originalName)
                 : source.getFileName().toString();
-        Path destination = destinationDirectory.resolve(destinationFilename);
-
-        if (source.equals(destination)) {
-            return;
-        }
+        Path destination = destinationDirectory.resolve(destinationFilename).toAbsolutePath().normalize();
 
         try {
-            Files.createDirectories(destinationDirectory);
-            Files.move(source, destination);
+            if (!destination.startsWith(sourceDirectory)) {
+                throw new IllegalArgumentException(
+                        "Destination must remain inside the source directory: " + destination);
+            }
+
+            if (source.equals(destination)) {
+                return;
+            }
+
+            Files.createDirectories(destination.getParent());
+            ConflictPolicy conflictPolicy = ConflictPolicy.fromConfigValue(actions.onConflict());
+
+            if (conflictPolicy == ConflictPolicy.OVERWRITE) {
+                Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
+            } else if (conflictPolicy == ConflictPolicy.SKIP) {
+                moveOrSkip(source, destination);
+            } else {
+                moveWithAutoSuffix(source, destination);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(
                     "Could not move " + source + " to " + destination, e);
@@ -48,5 +64,31 @@ public class FileActionExecutor {
         String filename = file.getFileName().toString();
         int extensionStart = filename.lastIndexOf('.');
         return extensionStart > 0 ? filename.substring(0, extensionStart) : filename;
+    }
+
+    private static void moveOrSkip(Path source, Path destination) throws IOException {
+        try {
+            Files.move(source, destination);
+        } catch (FileAlreadyExistsException e) {
+            return;
+        }
+    }
+
+    private static void moveWithAutoSuffix(Path source, Path destination) throws IOException {
+        String filename = destination.getFileName().toString();
+        int extensionStart = filename.lastIndexOf('.');
+        String baseName = extensionStart > 0 ? filename.substring(0, extensionStart) : filename;
+        String extension = extensionStart > 0 ? filename.substring(extensionStart) : "";
+
+        for (int suffix = 0;; suffix++) {
+            Path candidate = suffix == 0
+                    ? destination
+                    : destination.resolveSibling(baseName + " (" + suffix + ")" + extension);
+            try {
+                Files.move(source, candidate);
+                return;
+            } catch (FileAlreadyExistsException e) {
+            }
+        }
     }
 }
